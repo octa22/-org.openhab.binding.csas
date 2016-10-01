@@ -256,21 +256,53 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
     private String getBalance(String accountId) {
 
+        if (accountId.equals("ibod"))
+        {
+            return getLoyaltyBalance();
+        }
+        else {
+            return getAccountBalance(accountId);
+        }
+    }
+
+    private String getLoyaltyBalance() {
+        String url = null;
+
+        try {
+            url = NETBANKING_V3 + "cz/my/contracts/loyalty";
+
+            String line = DoNetbankingRequest(url);
+            logger.debug("CSAS getLoyalty: " + line);
+
+            JsonObject jobject = parser.parse(line).getAsJsonObject();
+            return jobject.get("pointsCount").getAsString();
+        } catch (MalformedURLException e) {
+            logger.error("The URL '" + url + "' is malformed: " + e.toString());
+        } catch (Exception e) {
+            logger.error("Cannot get CSAS token: " + e.toString());
+        }
+        return "";
+    }
+
+    private String DoNetbankingRequest(String url) throws Exception {
+        URL cookieUrl = new URL(url);
+        HttpURLConnection connection = (HttpURLConnection) cookieUrl.openConnection();
+        connection.setRequestMethod("GET");
+        connection.setRequestProperty("WEB-API-key", webAPIKey);
+        connection.setRequestProperty("Authorization", "Bearer " + accessToken);
+
+        InputStream response = connection.getInputStream();
+        return readResponse(response);
+    }
+
+    private String getAccountBalance(String accountId) {
         String url = null;
 
         try {
             url = NETBANKING_V3 + "my/accounts/" + accountId + "/balance";
 
-            URL cookieUrl = new URL(url);
-            HttpURLConnection connection = (HttpURLConnection) cookieUrl.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setRequestProperty("WEB-API-key", webAPIKey);
-            connection.setRequestProperty("Authorization", "Bearer " + accessToken);
-
-            InputStream response = connection.getInputStream();
-            String line = readResponse(response);
+            String line = DoNetbankingRequest(url);
             logger.debug("CSAS getBalance: " + line);
-
 
             JsonObject jobject = parser.parse(line).getAsJsonObject();
             jobject = jobject.get("balance").getAsJsonObject();
@@ -309,6 +341,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         return newBalance;
     }
 
+
     private void getTransactions(String accountId) {
 
         String url = null;
@@ -316,14 +349,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         try {
             url = NETBANKING_V3 + "my/accounts/" + accountId + "/transactions?dateStart=2016-08-01T00:00:00+02:00&dateEnd=2016-08-31T00:00:00+02:00";
 
-            URL cookieUrl = new URL(url);
-            HttpURLConnection connection = (HttpURLConnection) cookieUrl.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setRequestProperty("WEB-API-key", webAPIKey);
-            connection.setRequestProperty("Authorization", "Bearer " + accessToken);
-
-            InputStream response = connection.getInputStream();
-            String line = readResponse(response);
+            String line = DoNetbankingRequest(url);
             logger.info("CSAS getTransactions: " + line);
 
             /*
@@ -352,14 +378,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         try {
             url = NETBANKING_V3 + "my/cards";
 
-            URL cookieUrl = new URL(url);
-            HttpURLConnection connection = (HttpURLConnection) cookieUrl.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setRequestProperty("WEB-API-key", webAPIKey);
-            connection.setRequestProperty("Authorization", "Bearer " + accessToken);
-
-            InputStream response = connection.getInputStream();
-            String line = readResponse(response);
+            String line = DoNetbankingRequest(url);
             logger.debug("CSAS getCards: " + line);
 
             JsonObject jobject = parser.parse(line).getAsJsonObject();
@@ -386,19 +405,11 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         try {
             url = NETBANKING_V3 + "my/contracts/buildings";
 
-            URL cookieUrl = new URL(url);
-            HttpURLConnection connection = (HttpURLConnection) cookieUrl.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setRequestProperty("WEB-API-key", webAPIKey);
-            connection.setRequestProperty("Authorization", "Bearer " + accessToken);
-
-            InputStream response = connection.getInputStream();
-            String line = readResponse(response);
+            String line = DoNetbankingRequest(url);
             logger.info("CSAS getBuildingSavings: " + line);
 
             JsonObject jobject = parser.parse(line).getAsJsonObject();
             JsonArray jarray = jobject.get("buildings").getAsJsonArray();
-
 
             for (JsonElement je : jarray) {
                 jobject = je.getAsJsonObject();
@@ -443,14 +454,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         try {
             url = NETBANKING_V3 + "my/accounts";
 
-            URL cookieUrl = new URL(url);
-            HttpURLConnection connection = (HttpURLConnection) cookieUrl.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setRequestProperty("WEB-API-key", webAPIKey);
-            connection.setRequestProperty("Authorization", "Bearer " + accessToken);
-
-            InputStream response = connection.getInputStream();
-            String line = readResponse(response);
+            String line = DoNetbankingRequest(url);
             logger.debug("CSAS getAccounts: " + line);
 
             JsonObject jobject = parser.parse(line).getAsJsonObject();
