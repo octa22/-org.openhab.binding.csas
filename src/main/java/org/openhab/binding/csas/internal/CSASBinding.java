@@ -101,6 +101,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         getAccounts();
         getCards();
         getBuildingSavings();
+        getPensions();
         listUnboundAccounts();
         setProperlyConfigured(!accessToken.equals(""));
     }
@@ -398,6 +399,35 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         }
     }
 
+    private void getPensions() {
+
+        String url = null;
+
+        try {
+            url = NETBANKING_V3 + "cz/my/contracts/pensions";
+
+            String line = DoNetbankingRequest(url);
+            logger.debug("CSAS getPensions: " + line);
+
+            JsonObject jobject = parser.parse(line).getAsJsonObject();
+            JsonArray jarray = jobject.get("pensions").getAsJsonArray();
+
+
+            for (JsonElement je : jarray) {
+                String id = je.getAsJsonObject().get("id").getAsString();
+                String agreement = je.getAsJsonObject().get("agreementNumber").getAsString();
+                logger.debug("Pension account: " + id);
+                if (!accountList.containsKey(id))
+                    accountList.put(id, "Pension agreement: " + agreement);
+            }
+
+        } catch (MalformedURLException e) {
+            logger.error("The URL '" + url + "' is malformed: " + e.toString());
+        } catch (Exception e) {
+            logger.error("Cannot get CSAS token: " + e.toString());
+        }
+    }
+
     private void getBuildingSavings() {
 
         String url = null;
@@ -406,7 +436,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             url = NETBANKING_V3 + "my/contracts/buildings";
 
             String line = DoNetbankingRequest(url);
-            logger.info("CSAS getBuildingSavings: " + line);
+            logger.debug("CSAS getBuildingSavings: " + line);
 
             JsonObject jobject = parser.parse(line).getAsJsonObject();
             JsonArray jarray = jobject.get("buildings").getAsJsonArray();
@@ -428,7 +458,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         String number = jobject.get("accountno").getAsJsonObject().get("number").getAsString();
         String bankCode = jobject.get("accountno").getAsJsonObject().get("bankCode").getAsString();
         if (!accountList.containsKey(id))
-            accountList.put(id, number + "/" + bankCode);
+            accountList.put(id, "Account: " + number + "/" + bankCode);
     }
 
     private void listUnboundAccounts() {
@@ -439,7 +469,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             String id = (String) pair.getKey();
             String acc = (String) pair.getValue();
             if (!isBound(id))
-                sb.append("\tAccount: ").append(acc).append(" Id: ").append(id).append("\n");
+                sb.append("\t").append(acc).append(" Id: ").append(id).append("\n");
         }
         if (sb.length() > 0) {
             logger.info("Found unbound CSAS account(s): \n" + sb.toString());
