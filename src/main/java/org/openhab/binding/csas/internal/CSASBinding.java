@@ -50,11 +50,11 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
      * The BundleContext. This is only valid when the bundle is ACTIVE. It is set in the activate()
      * method and must not be accessed anymore once the deactivate() method was called or before activate()
      * was called.mvn archetype:generate -B -DarchetypeGroupId=org.openhab.archetype \
-     -DarchetypeArtifactId=org.openhab.archetype.binding \
-     -DarchetypeVersion=1.8.0-SNAPSHOT -Dauthor="Ondrej Pecta" -Dversion=1.9.0 \
-     -DartifactId=org.openhab.binding.csas \
-     -Dpackage=org.openhab.binding.csas \
-     -Dbinding-name=CSAS
+     * -DarchetypeArtifactId=org.openhab.archetype.binding \
+     * -DarchetypeVersion=1.8.0-SNAPSHOT -Dauthor="Ondrej Pecta" -Dversion=1.9.0 \
+     * -DartifactId=org.openhab.binding.csas \
+     * -Dpackage=org.openhab.binding.csas \
+     * -Dbinding-name=CSAS
      */
     private BundleContext bundleContext;
 
@@ -183,6 +183,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
     /**
      * Called by the SCR when the configuration of a binding has been changed through the ConfigAdmin service.
+     *
      * @param configuration Updated configuration properties
      */
     public void modified(final Map<String, Object> configuration) {
@@ -194,16 +195,17 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
     /**
      * Called by the SCR to deactivate the component when either the configuration is removed or
      * mandatory references are no longer satisfied or the component has simply been stopped.
+     *
      * @param reason Reason code for the deactivation:<br>
-     * <ul>
-     * <li> 0 – Unspecified
-     * <li> 1 – The component was disabled
-     * <li> 2 – A reference became unsatisfied
-     * <li> 3 – A configuration was changed
-     * <li> 4 – A configuration was deleted
-     * <li> 5 – The component was disposed
-     * <li> 6 – The bundle was stopped
-     * </ul>
+     *               <ul>
+     *               <li> 0 – Unspecified
+     *               <li> 1 – The component was disabled
+     *               <li> 2 – A reference became unsatisfied
+     *               <li> 3 – A configuration was changed
+     *               <li> 4 – A configuration was deleted
+     *               <li> 5 – The component was disposed
+     *               <li> 6 – The bundle was stopped
+     *               </ul>
      */
     public void deactivate(final int reason) {
         this.bundleContext = null;
@@ -257,11 +259,9 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
     private String getBalance(String accountId) {
 
-        if (accountId.equals("ibod"))
-        {
+        if (accountId.equals("ibod")) {
             return getLoyaltyBalance();
-        }
-        else {
+        } else {
             return getAccountBalance(accountId);
         }
     }
