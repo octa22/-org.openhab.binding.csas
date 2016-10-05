@@ -102,6 +102,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         getCards();
         getBuildingSavings();
         getPensions();
+        getInsurances();
         listUnboundAccounts();
         setProperlyConfigured(!accessToken.equals(""));
     }
@@ -318,7 +319,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
-            logger.error("Cannot get CSAS token: " + e.toString());
+            logger.error("Cannot get CSAS balance: " + e.toString());
         }
         return "";
     }
@@ -368,7 +369,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
-            logger.error("Cannot get CSAS token: " + e.toString());
+            logger.error("Cannot get CSAS transactions: " + e.toString());
         }
     }
 
@@ -395,7 +396,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
-            logger.error("Cannot get CSAS token: " + e.toString());
+            logger.error("Cannot get CSAS cards: " + e.toString());
         }
     }
 
@@ -424,7 +425,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
-            logger.error("Cannot get CSAS token: " + e.toString());
+            logger.error("Cannot get CSAS pensions: " + e.toString());
         }
     }
 
@@ -450,9 +451,38 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
-            logger.error("Cannot get CSAS token: " + e.toString());
+            logger.error("Cannot get CSAS building savings: " + e.toString());
         }
     }
+    private void getInsurances() {
+
+        String url = null;
+
+        try {
+            url = NETBANKING_V3 + "my/contracts/insurances";
+
+            String line = DoNetbankingRequest(url);
+            logger.debug("CSAS getInsurances: " + line);
+
+            JsonObject jobject = parser.parse(line).getAsJsonObject();
+            JsonArray jarray = jobject.get("insurances").getAsJsonArray();
+
+            for (JsonElement je : jarray) {
+                jobject = je.getAsJsonObject();
+                String id = jobject.get("id").getAsString();
+                String policyNumber = jobject.get("policyNumber").getAsString();
+                String productI18N = jobject.get("productI18N").getAsString();
+                if (!accountList.containsKey(id))
+                    accountList.put(id, "Insurance: " + policyNumber + " (" + productI18N + ")");
+            }
+
+        } catch (MalformedURLException e) {
+            logger.error("The URL '" + url + "' is malformed: " + e.toString());
+        } catch (Exception e) {
+            logger.error("Cannot get CSAS insurances: " + e.toString());
+        }
+    }
+
 
     private void readAccount(String id, JsonObject jobject) {
         String number = jobject.get("accountno").getAsJsonObject().get("number").getAsString();
@@ -498,7 +528,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
-            logger.error("Cannot get CSAS token: " + e.toString());
+            logger.error("Cannot get CSAS accounts: " + e.toString());
         }
     }
 
