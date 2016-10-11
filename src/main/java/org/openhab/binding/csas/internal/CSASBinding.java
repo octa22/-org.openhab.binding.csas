@@ -103,6 +103,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         getBuildingSavings();
         getPensions();
         getInsurances();
+        getSecurities();
         listUnboundAccounts();
         setProperlyConfigured(!accessToken.equals(""));
     }
@@ -386,7 +387,6 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             JsonObject jobject = parser.parse(line).getAsJsonObject();
             JsonArray jarray = jobject.get("cards").getAsJsonArray();
 
-
             for (JsonElement je : jarray) {
                 jobject = je.getAsJsonObject().get("mainAccount").getAsJsonObject();
                 String id = jobject.get("id").getAsString();
@@ -397,6 +397,33 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
             logger.error("Cannot get CSAS cards: " + e.toString());
+        }
+    }
+
+    private void getSecurities() {
+
+        String url = null;
+
+        try {
+            url = NETBANKING_V3 + "my/securities";
+
+            String line = DoNetbankingRequest(url);
+            logger.debug("CSAS getSecurities: " + line);
+
+            JsonObject jobject = parser.parse(line).getAsJsonObject();
+            JsonArray jarray = jobject.get("securitiesAccounts").getAsJsonArray();
+
+            for (JsonElement je : jarray) {
+                String id = je.getAsJsonObject().get("id").getAsString();
+                String account = je.getAsJsonObject().get("accountno").getAsString();
+                if (!accountList.containsKey(id))
+                    accountList.put(id, "Securities account: " + account);
+            }
+
+        } catch (MalformedURLException e) {
+            logger.error("The URL '" + url + "' is malformed: " + e.toString());
+        } catch (Exception e) {
+            logger.error("Cannot get CSAS securities: " + e.toString());
         }
     }
 
@@ -417,7 +444,6 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             for (JsonElement je : jarray) {
                 String id = je.getAsJsonObject().get("id").getAsString();
                 String agreement = je.getAsJsonObject().get("agreementNumber").getAsString();
-                logger.debug("Pension account: " + id);
                 if (!accountList.containsKey(id))
                     accountList.put(id, "Pension agreement: " + agreement);
             }
