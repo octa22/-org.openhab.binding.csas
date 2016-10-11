@@ -249,7 +249,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
         for (final CSASBindingProvider provider : providers) {
             for (final String itemName : provider.getItemNames()) {
-                String balance = getBalance(provider.getItemId(itemName));
+                String balance = getBalance(provider.getItemId(itemName), provider.getItemBalanceType(itemName));
                 if (!balance.equals(provider.getItemState(itemName))) {
                     eventPublisher.postUpdate(itemName, new StringType(balance));
                     provider.setItemState(itemName, balance);
@@ -259,12 +259,12 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
     }
 
-    private String getBalance(String accountId) {
+    private String getBalance(String accountId, CSASBalanceType balanceType) {
 
         if (accountId.equals("ibod")) {
             return getLoyaltyBalance();
         } else {
-            return getAccountBalance(accountId);
+            return getAccountBalance(accountId, balanceType);
         }
     }
 
@@ -298,7 +298,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         return readResponse(response);
     }
 
-    private String getAccountBalance(String accountId) {
+    private String getAccountBalance(String accountId, CSASBalanceType balanceType) {
         String url = null;
 
         try {
@@ -308,7 +308,11 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             logger.debug("CSAS getBalance: " + line);
 
             JsonObject jobject = parser.parse(line).getAsJsonObject();
-            jobject = jobject.get("balance").getAsJsonObject();
+            if( balanceType.equals(CSASBalanceType.BALANCE))
+                jobject = jobject.get("balance").getAsJsonObject();
+            else
+                jobject = jobject.get("disposable").getAsJsonObject();
+
             String value = jobject.get("value").getAsString();
             String currency = jobject.get("currency").getAsString();
             int precision = jobject.get("precision").getAsInt();

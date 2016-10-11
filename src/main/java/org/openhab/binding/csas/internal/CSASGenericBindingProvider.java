@@ -51,10 +51,15 @@ public class CSASGenericBindingProvider extends AbstractGenericBindingProvider i
     @Override
     public void processBindingConfiguration(String context, Item item, String bindingConfig) throws BindingConfigParseException {
         super.processBindingConfiguration(context, item, bindingConfig);
-        CSASBindingConfig config = new CSASBindingConfig(bindingConfig);
 
-        //parse bindingconfig here ...
+        String id = bindingConfig;
+        if(id.contains("#"))
+        {
+            int pos = id.indexOf('#');
+            id = id.substring(0, pos);
+        }
 
+        CSASBindingConfig config = new CSASBindingConfig(id, bindingConfig.endsWith("#disposable") ? CSASBalanceType.DISPOSABLE_BALANCE: CSASBalanceType.BALANCE);
         addBindingConfig(item, config);
     }
 
@@ -74,6 +79,12 @@ public class CSASGenericBindingProvider extends AbstractGenericBindingProvider i
         return config != null ? (config.getId()) : null;
     }
 
+    public CSASBalanceType getItemBalanceType(String itemName) {
+        final CSASBindingConfig config = (CSASBindingConfig) this.bindingConfigs.get(itemName);
+        return config != null ? (config.getBalanceType()) : null;
+    }
+
+
     /**
      * This is a helper class holding binding specific configuration details
      *
@@ -85,21 +96,23 @@ public class CSASGenericBindingProvider extends AbstractGenericBindingProvider i
 
         private String id;
         private String state;
+        private CSASBalanceType balanceType;
 
-        CSASBindingConfig(String id) {
+        CSASBindingConfig(String id, CSASBalanceType balanceType) {
             this.id = id;
+            this.balanceType = balanceType;
         }
 
         public String getId() {
             return id;
         }
 
-        public void setId(String id) {
-            this.id = id;
-        }
-
         public String getState() {
             return state;
+        }
+
+        public CSASBalanceType getBalanceType() {
+            return balanceType;
         }
 
         public void setState(String state) {

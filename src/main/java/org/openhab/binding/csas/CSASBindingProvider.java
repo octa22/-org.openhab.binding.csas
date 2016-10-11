@@ -8,6 +8,7 @@
  */
 package org.openhab.binding.csas;
 
+import org.openhab.binding.csas.internal.CSASBalanceType;
 import org.openhab.core.binding.BindingProvider;
 
 /**
@@ -17,5 +18,6 @@ import org.openhab.core.binding.BindingProvider;
 public interface CSASBindingProvider extends BindingProvider {
     String getItemId(String itemName);
     String getItemState(String itemName);
+    CSASBalanceType getItemBalanceType(String itemName);
     void setItemState(String itemName, String state);
 }
