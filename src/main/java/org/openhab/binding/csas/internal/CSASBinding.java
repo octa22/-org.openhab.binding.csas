@@ -278,7 +278,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             logger.debug("CSAS getLoyalty: " + line);
 
             JsonObject jobject = parser.parse(line).getAsJsonObject();
-            return jobject.get("pointsCount").getAsString();
+            return formatMoney(jobject.get("pointsCount").getAsString());
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
