@@ -3,7 +3,8 @@ package org.openhab.binding.csas.internal;
 /**
  * Created by Ondřej Pečta on 11. 10. 2016.
  */
-public enum CSASBalanceType {
+public enum CSASItemType {
     BALANCE,
-    DISPOSABLE_BALANCE
+    DISPOSABLE_BALANCE,
+    TRANSACTION
 }

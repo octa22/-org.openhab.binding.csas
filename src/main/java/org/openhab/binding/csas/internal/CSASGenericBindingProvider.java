@@ -11,9 +11,7 @@ package org.openhab.binding.csas.internal;
 import org.openhab.binding.csas.CSASBindingProvider;
 import org.openhab.core.binding.BindingConfig;
 import org.openhab.core.items.Item;
-import org.openhab.core.library.items.DimmerItem;
 import org.openhab.core.library.items.StringItem;
-import org.openhab.core.library.items.SwitchItem;
 import org.openhab.model.item.binding.AbstractGenericBindingProvider;
 import org.openhab.model.item.binding.BindingConfigParseException;
 
@@ -53,13 +51,17 @@ public class CSASGenericBindingProvider extends AbstractGenericBindingProvider i
         super.processBindingConfiguration(context, item, bindingConfig);
 
         String id = bindingConfig;
-        if(id.contains("#"))
-        {
+        if (id.contains("#")) {
             int pos = id.indexOf('#');
             id = id.substring(0, pos);
         }
+        CSASBindingConfig config;
 
-        CSASBindingConfig config = new CSASBindingConfig(id, bindingConfig.endsWith("#disposable") ? CSASBalanceType.DISPOSABLE_BALANCE: CSASBalanceType.BALANCE);
+        if (bindingConfig.endsWith("#disposable") || id.equals(bindingConfig)) {
+            config = new CSASBindingConfig(id, bindingConfig.endsWith("#disposable") ? CSASItemType.DISPOSABLE_BALANCE : CSASItemType.BALANCE);
+        } else {
+            config = new CSASBindingConfig(id, CSASItemType.TRANSACTION, Integer.parseInt(bindingConfig.replace(id + "#", "")));
+        }
         addBindingConfig(item, config);
     }
 
@@ -79,11 +81,15 @@ public class CSASGenericBindingProvider extends AbstractGenericBindingProvider i
         return config != null ? (config.getId()) : null;
     }
 
-    public CSASBalanceType getItemBalanceType(String itemName) {
+    public CSASItemType getItemType(String itemName) {
         final CSASBindingConfig config = (CSASBindingConfig) this.bindingConfigs.get(itemName);
-        return config != null ? (config.getBalanceType()) : null;
+        return config != null ? (config.getItemType()) : null;
     }
 
+    public int getTransactionId(String itemName) {
+        final CSASBindingConfig config = (CSASBindingConfig) this.bindingConfigs.get(itemName);
+        return config != null ? (config.getTransactionId()) : null;
+    }
 
     /**
      * This is a helper class holding binding specific configuration details
@@ -96,11 +102,19 @@ public class CSASGenericBindingProvider extends AbstractGenericBindingProvider i
 
         private String id;
         private String state;
-        private CSASBalanceType balanceType;
+        private CSASItemType balanceType;
 
-        CSASBindingConfig(String id, CSASBalanceType balanceType) {
+        private int transactionId;
+
+        CSASBindingConfig(String id, CSASItemType balanceType) {
             this.id = id;
             this.balanceType = balanceType;
+        }
+
+        CSASBindingConfig(String id, CSASItemType balanceType, int transactionId) {
+            this.id = id;
+            this.balanceType = balanceType;
+            this.transactionId = transactionId;
         }
 
         public String getId() {
@@ -111,8 +125,12 @@ public class CSASGenericBindingProvider extends AbstractGenericBindingProvider i
             return state;
         }
 
-        public CSASBalanceType getBalanceType() {
+        public CSASItemType getItemType() {
             return balanceType;
+        }
+
+        public int getTransactionId() {
+            return transactionId;
         }
 
         public void setState(String state) {
