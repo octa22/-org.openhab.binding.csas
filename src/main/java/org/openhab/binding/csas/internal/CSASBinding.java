@@ -301,7 +301,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
-            logger.error("Cannot get CSAS token: " + e.toString());
+            logger.error("Cannot get CSAS loyalty points: " + e.toString());
         }
         return "";
     }
