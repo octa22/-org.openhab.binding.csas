@@ -27,6 +27,8 @@ import org.openhab.binding.csas.CSASBindingProvider;
 
 import org.apache.commons.lang.StringUtils;
 import org.openhab.core.binding.AbstractActiveBinding;
+import org.openhab.core.items.ItemNotFoundException;
+import org.openhab.core.items.ItemRegistry;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.State;
@@ -58,6 +60,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
      * -Dbinding-name=CSAS
      */
     private BundleContext bundleContext;
+    private ItemRegistry itemRegistry;
 
     //Constants
     final private String NETBANKING_V3 = "https://www.csas.cz/webapi/api/v3/netbanking/";
@@ -216,6 +219,13 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         // should be reset when activating this binding again
     }
 
+    public void setItemRegistry(ItemRegistry itemRegistry) {
+        this.itemRegistry = itemRegistry;
+    }
+
+    public void unsetItemRegistry(ItemRegistry itemRegistry) {
+        this.itemRegistry = null;
+    }
 
     /**
      * @{inheritDoc}
@@ -251,28 +261,34 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
         for (final CSASBindingProvider provider : providers) {
             for (final String itemName : provider.getItemNames()) {
-                if(! provider.getItemType(itemName).equals(CSASItemType.TRANSACTION)) {
-                    String balance = getBalance(provider.getItemId(itemName), provider.getItemType(itemName));
-                    if (!balance.equals(provider.getItemState(itemName))) {
-                        eventPublisher.postUpdate(itemName, new StringType(balance));
-                        provider.setItemState(itemName, balance);
+                State oldValue = null;
+                State newValue = null;
+                try {
+                    oldValue = itemRegistry.getItem(itemName).getState();
+
+                    if (!provider.getItemType(itemName).equals(CSASItemType.TRANSACTION)) {
+                        String balance = getBalance(provider.getItemId(itemName), provider.getItemType(itemName));
+                        newValue = new StringType(balance);
+
+                        if (!oldValue.equals(newValue)) {
+                            eventPublisher.postUpdate(itemName, newValue);
+                        }
+                    } else {
+                        //TODO assign transactions to items
+                        if (transactionsList == null)
+                            transactionsList = getTransactions(provider.getItemId(itemName));
+                        int id = provider.getTransactionId(itemName);
+                        String transaction = transactionsList.get(id - 1);
+                        newValue = new StringType(transaction);
+                        if (!oldValue.equals(newValue)) {
+                            eventPublisher.postUpdate(itemName, newValue);
+                        }
                     }
-                }
-                else
-                {
-                    //TODO assign transactions to items
-                    if( transactionsList == null)
-                        transactionsList = getTransactions(provider.getItemId(itemName));
-                    int id = provider.getTransactionId(itemName);
-                    String transaction = transactionsList.get(id-1);
-                    if (!transaction.equals(provider.getItemState(itemName))) {
-                        eventPublisher.postUpdate(itemName, new StringType(transaction));
-                        provider.setItemState(itemName, transaction);
-                    }
+                } catch (ItemNotFoundException e) {
+                    logger.error("Cannot find item " + itemName + " in item registry!");
                 }
             }
         }
-
     }
 
     private String getBalance(String accountId, CSASItemType balanceType) {
@@ -395,7 +411,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
                     Date date = myUTCFormat.parse(je.getAsJsonObject().get("transactionDate").getAsString());
                     String shortDate = requiredFormat.format(date);
                     jobject = je.getAsJsonObject().get("amountSender").getAsJsonObject();
-                    transactionsList.add(formatMoney(readBalance(jobject))+ " " + shortDate);
+                    transactionsList.add(formatMoney(readBalance(jobject)) + " " + shortDate);
                 }
             }
             logger.debug(transactionsList.toString());

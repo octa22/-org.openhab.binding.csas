@@ -65,17 +65,6 @@ public class CSASGenericBindingProvider extends AbstractGenericBindingProvider i
         addBindingConfig(item, config);
     }
 
-    public void setItemState(String itemName, String state) {
-        final CSASBindingConfig config = (CSASBindingConfig) this.bindingConfigs.get(itemName);
-        config.setState(state);
-    }
-
-    public String getItemState(String itemName) {
-        final CSASBindingConfig config = (CSASBindingConfig) this.bindingConfigs.get(itemName);
-        return config != null ? (config.getState()) : "";
-    }
-
-
     public String getItemId(String itemName) {
         final CSASBindingConfig config = (CSASBindingConfig) this.bindingConfigs.get(itemName);
         return config != null ? (config.getId()) : null;
@@ -101,7 +90,6 @@ public class CSASGenericBindingProvider extends AbstractGenericBindingProvider i
         // put member fields here which holds the parsed values
 
         private String id;
-        private String state;
         private CSASItemType balanceType;
 
         private int transactionId;
@@ -121,20 +109,12 @@ public class CSASGenericBindingProvider extends AbstractGenericBindingProvider i
             return id;
         }
 
-        public String getState() {
-            return state;
-        }
-
         public CSASItemType getItemType() {
             return balanceType;
         }
 
         public int getTransactionId() {
             return transactionId;
-        }
-
-        public void setState(String state) {
-            this.state = state;
         }
     }
 

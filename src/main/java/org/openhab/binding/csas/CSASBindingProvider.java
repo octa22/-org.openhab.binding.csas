@@ -17,8 +17,6 @@ import org.openhab.core.binding.BindingProvider;
  */
 public interface CSASBindingProvider extends BindingProvider {
     String getItemId(String itemName);
-    String getItemState(String itemName);
     CSASItemType getItemType(String itemName);
     int getTransactionId(String itemName);
-    void setItemState(String itemName, String state);
 }
