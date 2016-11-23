@@ -19,7 +19,6 @@ import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
 
 import com.google.gson.*;
 import org.openhab.binding.csas.CSASBindingProvider;
@@ -262,7 +261,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         for (final CSASBindingProvider provider : providers) {
             for (final String itemName : provider.getItemNames()) {
                 State oldValue;
-                State newValue = null;
+                State newValue;
                 try {
                     oldValue = itemRegistry.getItem(itemName).getState();
 
@@ -270,32 +269,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
                         String balance = getBalance(provider.getItemId(itemName), provider.getItemType(itemName));
                         newValue = new StringType(balance);
                     } else {
-                        String iban = provider.getItemId(itemName);
-                        if (!transactionsList.containsKey(iban))
-                            transactionsList.put(iban, getTransactions(iban));
-                        int id = provider.getTransactionId(itemName);
-                        if (id > transactionsList.get(iban).size())
-                            continue;
-                        if (provider.getItemType(itemName).equals(CSASItemType.TRANSACTION_BALANCE)) {
-                            String balance = transactionsList.get(iban).get(id - 1).getBalance();
-                            newValue = new StringType(balance);
-                        }
-                        if (provider.getItemType(itemName).equals(CSASItemType.TRANSACTION_INFO)) {
-                            String info = transactionsList.get(iban).get(id - 1).getAccountPartyInfo();
-                            newValue = new StringType(info);
-                        }
-                        if (provider.getItemType(itemName).equals(CSASItemType.TRANSACTION_DESCRIPTION)) {
-                            String desc = transactionsList.get(iban).get(id - 1).getDescription();
-                            newValue = new StringType(desc);
-                        }
-                        if (provider.getItemType(itemName).equals(CSASItemType.TRANSACTION_VS)) {
-                            String vs = transactionsList.get(iban).get(id - 1).getVariableSymbol();
-                            newValue = new StringType(vs);
-                        }
-                        if (provider.getItemType(itemName).equals(CSASItemType.TRANSACTION_PARTY)) {
-                            String party = transactionsList.get(iban).get(id - 1).getAccountPartyDescription();
-                            newValue = new StringType(party);
-                        }
+                          newValue = new StringType(getTransactionValue(itemName, transactionsList, provider));
                     }
                     if (!oldValue.equals(newValue)) {
                         eventPublisher.postUpdate(itemName, newValue);
@@ -306,6 +280,37 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             }
         }
 
+    }
+
+    private String getTransactionValue(String itemName, HashMap<String, ArrayList<CSASTransaction>> transactionsList, CSASBindingProvider provider) {
+        String iban = provider.getItemId(itemName);
+        if (!transactionsList.containsKey(iban))
+            transactionsList.put(iban, getTransactions(iban));
+        int id = provider.getTransactionId(itemName);
+        if (id > transactionsList.get(iban).size())
+            return "";
+
+        String result = "";
+        CSASItemType type = provider.getItemType(itemName);
+        switch (type)
+        {
+            case TRANSACTION_BALANCE:
+                result = transactionsList.get(iban).get(id - 1).getBalance();
+                break;
+            case TRANSACTION_INFO:
+                result = transactionsList.get(iban).get(id - 1).getAccountPartyInfo();
+                break;
+            case TRANSACTION_DESCRIPTION:
+                result = transactionsList.get(iban).get(id - 1).getDescription();
+                break;
+            case TRANSACTION_VS:
+                result = transactionsList.get(iban).get(id - 1).getVariableSymbol();
+                break;
+            case TRANSACTION_PARTY:
+                result = transactionsList.get(iban).get(id - 1).getAccountPartyDescription();
+                break;
+        }
+        return result;
     }
 
     private String getBalance(String accountId, CSASItemType balanceType) {
@@ -416,8 +421,6 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         SimpleDateFormat requestFormat = new SimpleDateFormat("yyyy-MM-dd");
 
         try {
-            //url = NETBANKING_V3 + "my/accounts/" + accountId + "/transactions";
-            //url = NETBANKING_V3 + "cz/my/accounts/" + accountId + "/transactions?dateStart=2016-11-05T00:00:00+01:00&dateEnd=2016-11-21T00:00:00+01:00";
             url = NETBANKING_V3 + "cz/my/accounts/" + accountId + "/transactions?dateStart=" + requestFormat.format(addDays(new Date(), -14)) + "T00:00:00+01:00&dateEnd=" + requestFormat.format(new Date()) + "T00:00:00+01:00";
 
             String line = DoNetbankingRequest(url);
