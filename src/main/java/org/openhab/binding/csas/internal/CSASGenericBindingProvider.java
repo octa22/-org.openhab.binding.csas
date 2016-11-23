@@ -60,7 +60,31 @@ public class CSASGenericBindingProvider extends AbstractGenericBindingProvider i
         if (bindingConfig.endsWith("#disposable") || id.equals(bindingConfig)) {
             config = new CSASBindingConfig(id, bindingConfig.endsWith("#disposable") ? CSASItemType.DISPOSABLE_BALANCE : CSASItemType.BALANCE);
         } else {
-            config = new CSASBindingConfig(id, CSASItemType.TRANSACTION, Integer.parseInt(bindingConfig.replace(id + "#", "")));
+
+            if (bindingConfig.contains(".")) {
+                int pos = bindingConfig.indexOf('.');
+                int tranId = Integer.parseInt(bindingConfig.substring(0,pos).replace(id + "#", ""));
+                if( bindingConfig.substring(pos).equals(".party"))
+                {
+                    config = new CSASBindingConfig(id, CSASItemType.TRANSACTION_PARTY, tranId);
+                } else
+                if( bindingConfig.substring(pos).equals(".info"))
+                {
+                    config = new CSASBindingConfig(id, CSASItemType.TRANSACTION_INFO, tranId);
+                } else
+                if( bindingConfig.substring(pos).equals(".description"))
+                {
+                    config = new CSASBindingConfig(id, CSASItemType.TRANSACTION_DESCRIPTION, tranId);
+                } else
+                if( bindingConfig.substring(pos).equals(".vs"))
+                {
+                    config = new CSASBindingConfig(id, CSASItemType.TRANSACTION_VS, tranId);
+                }
+                else
+                    return;
+            }
+            else
+                config = new CSASBindingConfig(id, CSASItemType.TRANSACTION_BALANCE, Integer.parseInt(bindingConfig.replace(id + "#", "")));
         }
         addBindingConfig(item, config);
     }

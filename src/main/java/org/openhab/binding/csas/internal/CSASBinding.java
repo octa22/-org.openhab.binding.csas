@@ -16,13 +16,12 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.gson.*;
 import org.openhab.binding.csas.CSASBindingProvider;
 
 import org.apache.commons.lang.StringUtils;
@@ -36,6 +35,7 @@ import org.osgi.framework.BundleContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.commons.lang.time.DateUtils.addDays;
 
 /**
  * Implement this class if you are going create an actively polling service
@@ -257,38 +257,55 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         }
 
         refreshToken();
-        ArrayList<String> transactionsList = null;
+        HashMap<String, ArrayList<CSASTransaction>> transactionsList = new HashMap<>();
 
         for (final CSASBindingProvider provider : providers) {
             for (final String itemName : provider.getItemNames()) {
-                State oldValue = null;
+                State oldValue;
                 State newValue = null;
                 try {
                     oldValue = itemRegistry.getItem(itemName).getState();
 
-                    if (!provider.getItemType(itemName).equals(CSASItemType.TRANSACTION)) {
+                    if (provider.getItemType(itemName).equals(CSASItemType.DISPOSABLE_BALANCE) || provider.getItemType(itemName).equals(CSASItemType.BALANCE)) {
                         String balance = getBalance(provider.getItemId(itemName), provider.getItemType(itemName));
                         newValue = new StringType(balance);
-
-                        if (!oldValue.equals(newValue)) {
-                            eventPublisher.postUpdate(itemName, newValue);
-                        }
                     } else {
-                        //TODO assign transactions to items
-                        if (transactionsList == null)
-                            transactionsList = getTransactions(provider.getItemId(itemName));
+                        String iban = provider.getItemId(itemName);
+                        if (!transactionsList.containsKey(iban))
+                            transactionsList.put(iban, getTransactions(iban));
                         int id = provider.getTransactionId(itemName);
-                        String transaction = transactionsList.get(id - 1);
-                        newValue = new StringType(transaction);
-                        if (!oldValue.equals(newValue)) {
-                            eventPublisher.postUpdate(itemName, newValue);
+                        if (id > transactionsList.get(iban).size())
+                            continue;
+                        if (provider.getItemType(itemName).equals(CSASItemType.TRANSACTION_BALANCE)) {
+                            String balance = transactionsList.get(iban).get(id - 1).getBalance();
+                            newValue = new StringType(balance);
                         }
+                        if (provider.getItemType(itemName).equals(CSASItemType.TRANSACTION_INFO)) {
+                            String info = transactionsList.get(iban).get(id - 1).getAccountPartyInfo();
+                            newValue = new StringType(info);
+                        }
+                        if (provider.getItemType(itemName).equals(CSASItemType.TRANSACTION_DESCRIPTION)) {
+                            String desc = transactionsList.get(iban).get(id - 1).getDescription();
+                            newValue = new StringType(desc);
+                        }
+                        if (provider.getItemType(itemName).equals(CSASItemType.TRANSACTION_VS)) {
+                            String vs = transactionsList.get(iban).get(id - 1).getVariableSymbol();
+                            newValue = new StringType(vs);
+                        }
+                        if (provider.getItemType(itemName).equals(CSASItemType.TRANSACTION_PARTY)) {
+                            String party = transactionsList.get(iban).get(id - 1).getAccountPartyDescription();
+                            newValue = new StringType(party);
+                        }
+                    }
+                    if (!oldValue.equals(newValue)) {
+                        eventPublisher.postUpdate(itemName, newValue);
                     }
                 } catch (ItemNotFoundException e) {
                     logger.error("Cannot find item " + itemName + " in item registry!");
                 }
             }
         }
+
     }
 
     private String getBalance(String accountId, CSASItemType balanceType) {
@@ -363,17 +380,18 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
     private String readBalance(JsonObject jobject) {
         String value = jobject.get("value").getAsString();
         String currency = jobject.get("currency").getAsString();
+
         int precision = jobject.get("precision").getAsInt();
         int places = value.length();
 
-        String balance = value.substring(0, places - precision) + "." + value.substring(places - precision) + " " + currency;
+        String balance = (precision == 0) ? value + ".00 " + currency : value.substring(0, places - precision) + "." + value.substring(places - precision) + " " + currency;
         return balance;
     }
 
     private String formatMoney(String balance) {
+        String newBalance = "";
         int len = balance.length();
         int dec = balance.indexOf('.');
-        String newBalance = "";
         if (dec >= 0) {
             len = dec;
             newBalance = balance.substring(dec);
@@ -390,15 +408,17 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
     }
 
 
-    private ArrayList<String> getTransactions(String accountId) {
+    private ArrayList<CSASTransaction> getTransactions(String accountId) {
 
         String url = null;
-        ArrayList<String> transactionsList = new ArrayList<>();
-        SimpleDateFormat myUTCFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
-        SimpleDateFormat requiredFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm");
+        ArrayList<CSASTransaction> transactionsList = new ArrayList<>();
+
+        SimpleDateFormat requestFormat = new SimpleDateFormat("yyyy-MM-dd");
 
         try {
-            url = NETBANKING_V3 + "my/accounts/" + accountId + "/transactions";
+            //url = NETBANKING_V3 + "my/accounts/" + accountId + "/transactions";
+            //url = NETBANKING_V3 + "cz/my/accounts/" + accountId + "/transactions?dateStart=2016-11-05T00:00:00+01:00&dateEnd=2016-11-21T00:00:00+01:00";
+            url = NETBANKING_V3 + "cz/my/accounts/" + accountId + "/transactions?dateStart=" + requestFormat.format(addDays(new Date(), -14)) + "T00:00:00+01:00&dateEnd=" + requestFormat.format(new Date()) + "T00:00:00+01:00";
 
             String line = DoNetbankingRequest(url);
             logger.debug("CSAS getTransactions: " + line);
@@ -408,13 +428,11 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
                 JsonArray jarray = jobject.get("transactions").getAsJsonArray();
 
                 for (JsonElement je : jarray) {
-                    Date date = myUTCFormat.parse(je.getAsJsonObject().get("transactionDate").getAsString());
-                    String shortDate = requiredFormat.format(date);
-                    jobject = je.getAsJsonObject().get("amountSender").getAsJsonObject();
-                    transactionsList.add(formatMoney(readBalance(jobject)) + " " + shortDate);
+                    jobject = je.getAsJsonObject();
+                    transactionsList.add(createTransaction(jobject));
                 }
             }
-            logger.debug(transactionsList.toString());
+            logger.trace("Transactions: " + transactionsList.toString());
             return transactionsList;
 
         } catch (MalformedURLException e) {
@@ -423,6 +441,45 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             logger.error("Cannot get CSAS transactions: " + e.toString());
         }
         return transactionsList;
+    }
+
+    private CSASTransaction createTransaction(JsonObject jobject) throws ParseException {
+
+        SimpleDateFormat myUTCFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
+        SimpleDateFormat requiredFormat = new SimpleDateFormat("dd.MM.yyyy");
+
+        Date date = myUTCFormat.parse(jobject.get("bookingDate").getAsString());
+        String shortDate = requiredFormat.format(date);
+
+        CSASTransaction tran = new CSASTransaction();
+
+        try {
+            JsonObject jamount = jobject.get("amount").getAsJsonObject();
+
+            String balance = formatMoney(readBalance(jamount)) + " " + shortDate;
+            String description = jobject.get("description").getAsString();
+            tran.setBalance(balance);
+            tran.setDescription(description);
+
+            if( jobject.get("variableSymbol") != null && !jobject.get("variableSymbol").isJsonNull()  )
+            {
+                String variableSymbol = jobject.get("variableSymbol").getAsString();
+                tran.setVariableSymbol(variableSymbol);
+            }
+
+            if( jobject.get("accountParty") != null ) {
+                JsonObject jparty = jobject.get("accountParty").getAsJsonObject();
+                String accountPartyDescription = jparty.get("accountPartyDescription").getAsString();
+                String accountPartyInfo = jparty.get("accountPartyInfo").getAsString();
+                tran.setAccountPartyInfo(accountPartyInfo);
+                tran.setAccountPartyDescription(accountPartyDescription);
+            }
+
+        } catch (Exception ex) {
+            logger.error(ex.toString());
+        }
+
+        return tran;
     }
 
     private void getCards() {
