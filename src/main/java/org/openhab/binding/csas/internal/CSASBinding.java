@@ -269,7 +269,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
                         String balance = getBalance(provider.getItemId(itemName), provider.getItemType(itemName));
                         newValue = new StringType(balance);
                     } else {
-                          newValue = new StringType(getTransactionValue(itemName, transactionsList, provider));
+                        newValue = new StringType(getTransactionValue(itemName, transactionsList, provider));
                     }
                     if (!oldValue.equals(newValue)) {
                         eventPublisher.postUpdate(itemName, newValue);
@@ -290,10 +290,10 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         if (id > transactionsList.get(iban).size())
             return "";
 
+
         String result = "";
         CSASItemType type = provider.getItemType(itemName);
-        switch (type)
-        {
+        switch (type) {
             case TRANSACTION_BALANCE:
                 result = transactionsList.get(iban).get(id - 1).getBalance();
                 break;
@@ -456,6 +456,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
         CSASTransaction tran = new CSASTransaction();
 
+
         try {
             JsonObject jamount = jobject.get("amount").getAsJsonObject();
 
@@ -464,20 +465,23 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             tran.setBalance(balance);
             tran.setDescription(description);
 
-            if( jobject.get("variableSymbol") != null && !jobject.get("variableSymbol").isJsonNull()  )
-            {
+            if (jobject.get("variableSymbol") != null && !jobject.get("variableSymbol").isJsonNull()) {
                 String variableSymbol = jobject.get("variableSymbol").getAsString();
                 tran.setVariableSymbol(variableSymbol);
             }
 
-            if( jobject.get("accountParty") != null ) {
+            if (jobject.get("accountParty") != null) {
                 JsonObject jparty = jobject.get("accountParty").getAsJsonObject();
-                String accountPartyDescription = jparty.get("accountPartyDescription").getAsString();
-                String accountPartyInfo = jparty.get("accountPartyInfo").getAsString();
-                tran.setAccountPartyInfo(accountPartyInfo);
-                tran.setAccountPartyDescription(accountPartyDescription);
-            }
+                if (!jparty.get("accountPartyDescription").isJsonNull()) {
+                    String accountPartyDescription = jparty.get("accountPartyDescription").getAsString();
+                    tran.setAccountPartyDescription(accountPartyDescription);
+                }
+                if (!jparty.get("accountPartyInfo").isJsonNull()) {
+                    String accountPartyInfo = jparty.get("accountPartyInfo").getAsString();
+                    tran.setAccountPartyInfo(accountPartyInfo);
+                }
 
+            }
         } catch (Exception ex) {
             logger.error(ex.toString());
         }
