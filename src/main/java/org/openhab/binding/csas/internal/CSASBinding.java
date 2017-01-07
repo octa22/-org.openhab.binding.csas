@@ -100,15 +100,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         readConfiguration(configuration);
         // read further config parameters here ...
 
-        refreshToken();
-        getAccounts();
-        getCards();
-        getBuildingSavings();
-        getPensions();
-        getInsurances();
-        getSecurities();
-        listUnboundAccounts();
-        setProperlyConfigured(!accessToken.equals(""));
+        setProperlyConfigured(true);
     }
 
     private void refreshToken() {
@@ -255,7 +247,22 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             return;
         }
 
-        refreshToken();
+        if(refreshToken.equals(""))
+        {
+            refreshToken();
+            getAccounts();
+            getCards();
+            getBuildingSavings();
+            getPensions();
+            getInsurances();
+            getSecurities();
+            listUnboundAccounts();
+            if(refreshToken.equals(""))
+                return;
+        }
+        else
+            refreshToken();
+
         HashMap<String, ArrayList<CSASTransaction>> transactionsList = new HashMap<>();
 
         for (final CSASBindingProvider provider : providers) {
