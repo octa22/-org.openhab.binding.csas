@@ -8,6 +8,22 @@
  */
 package org.openhab.binding.csas.internal;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import org.apache.commons.lang.StringUtils;
+import org.openhab.binding.csas.CSASBindingProvider;
+import org.openhab.core.binding.AbstractActiveBinding;
+import org.openhab.core.items.ItemNotFoundException;
+import org.openhab.core.items.ItemRegistry;
+import org.openhab.core.library.types.StringType;
+import org.openhab.core.types.Command;
+import org.openhab.core.types.State;
+import org.osgi.framework.BundleContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.InputStream;
@@ -19,20 +35,6 @@ import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
-
-import com.google.gson.*;
-import org.openhab.binding.csas.CSASBindingProvider;
-
-import org.apache.commons.lang.StringUtils;
-import org.openhab.core.binding.AbstractActiveBinding;
-import org.openhab.core.items.ItemNotFoundException;
-import org.openhab.core.items.ItemRegistry;
-import org.openhab.core.library.types.StringType;
-import org.openhab.core.types.Command;
-import org.openhab.core.types.State;
-import org.osgi.framework.BundleContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static org.apache.commons.lang.time.DateUtils.addDays;
 
@@ -126,7 +128,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             logger.debug("CSAS response: " + line);
 
             JsonObject jobject = parser.parse(line).getAsJsonObject();
-            accessToken = jobject.get("access_token").getAsString();
+            accessToken = safeGetString(jobject, "access_token");
 
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
@@ -247,8 +249,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             return;
         }
 
-        if(refreshToken.equals(""))
-        {
+        if (refreshToken.equals("")) {
             refreshToken();
             getAccounts();
             getCards();
@@ -257,10 +258,9 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             getInsurances();
             getSecurities();
             listUnboundAccounts();
-            if(refreshToken.equals(""))
+            if (refreshToken.equals(""))
                 return;
-        }
-        else
+        } else
             refreshToken();
 
         HashMap<String, ArrayList<CSASTransaction>> transactionsList = new HashMap<>();
@@ -340,7 +340,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
             JsonObject jobject = parser.parse(line).getAsJsonObject();
             if (jobject.get("pointsCount") != null) {
-                return formatMoney(jobject.get("pointsCount").getAsString());
+                return formatMoney(safeGetString(jobject, "pointsCount"));
             } else
                 return "N/A";
         } catch (MalformedURLException e) {
@@ -390,14 +390,19 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
     }
 
     private String readBalance(JsonObject jobject) {
-        String value = jobject.get("value").getAsString();
-        String currency = jobject.get("currency").getAsString();
+        String value = safeGetString(jobject, "value");
+        String currency = safeGetString(jobject, "currency");
 
         int precision = jobject.get("precision").getAsInt();
         int places = value.length();
 
         String balance = (precision == 0) ? value + ".00 " + currency : value.substring(0, places - precision) + "." + value.substring(places - precision) + " " + currency;
         return balance;
+    }
+
+    private String safeGetString(JsonObject jobject, String value) {
+        if (jobject == null || jobject.isJsonNull() || jobject.get(value) == null) return "null";
+        return (jobject.get(value).isJsonNull() ? "N/A" : jobject.get(value).getAsString());
     }
 
     private String formatMoney(String balance) {
@@ -458,41 +463,35 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         SimpleDateFormat myUTCFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
         SimpleDateFormat requiredFormat = new SimpleDateFormat("dd.MM.yyyy");
 
-        Date date = myUTCFormat.parse(jobject.get("bookingDate").getAsString());
+        Date date = myUTCFormat.parse(safeGetString(jobject, "bookingDate"));
         String shortDate = requiredFormat.format(date);
 
         CSASTransaction tran = new CSASTransaction();
 
+        if (jobject != null && !jobject.isJsonNull()) {
+            try {
+                JsonObject jamount = jobject.get("amount").getAsJsonObject();
 
-        try {
-            JsonObject jamount = jobject.get("amount").getAsJsonObject();
+                String balance = formatMoney(readBalance(jamount)) + " " + shortDate;
+                String description = safeGetString(jobject, "description");
+                tran.setBalance(balance);
+                tran.setDescription(description);
 
-            String balance = formatMoney(readBalance(jamount)) + " " + shortDate;
-            String description = jobject.get("description").getAsString();
-            tran.setBalance(balance);
-            tran.setDescription(description);
-
-            if (jobject.get("variableSymbol") != null && !jobject.get("variableSymbol").isJsonNull()) {
-                String variableSymbol = jobject.get("variableSymbol").getAsString();
+                String variableSymbol = safeGetString(jobject, "variableSymbol");
                 tran.setVariableSymbol(variableSymbol);
-            }
 
-            if (jobject.get("accountParty") != null) {
-                JsonObject jparty = jobject.get("accountParty").getAsJsonObject();
-                if (!jparty.get("accountPartyDescription").isJsonNull()) {
-                    String accountPartyDescription = jparty.get("accountPartyDescription").getAsString();
+                if (jobject.get("accountParty") != null) {
+                    JsonObject jparty = jobject.get("accountParty").getAsJsonObject();
+                    String accountPartyDescription = safeGetString(jparty, "accountPartyDescription");
                     tran.setAccountPartyDescription(accountPartyDescription);
-                }
-                if (!jparty.get("accountPartyInfo").isJsonNull()) {
-                    String accountPartyInfo = jparty.get("accountPartyInfo").getAsString();
+
+                    String accountPartyInfo = safeGetString(jparty, "accountPartyInfo");
                     tran.setAccountPartyInfo(accountPartyInfo);
                 }
-
+            } catch (Exception ex) {
+                logger.error(ex.toString());
             }
-        } catch (Exception ex) {
-            logger.error(ex.toString());
         }
-
         return tran;
     }
 
@@ -512,8 +511,8 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
                 for (JsonElement je : jarray) {
                     jobject = je.getAsJsonObject().get("mainAccount").getAsJsonObject();
-                    if (jobject.get("id") != null) {
-                        String id = jobject.get("id").getAsString();
+                    if (jobject != null) {
+                        String id = safeGetString(jobject, "id");
                         readAccount(id, jobject);
                     }
                 }
@@ -541,8 +540,8 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
                 JsonArray jarray = jobject.get("securitiesAccounts").getAsJsonArray();
 
                 for (JsonElement je : jarray) {
-                    String id = je.getAsJsonObject().get("id").getAsString();
-                    String account = je.getAsJsonObject().get("accountno").getAsString();
+                    String id = safeGetString(je.getAsJsonObject(), "id");
+                    String account = safeGetString(je.getAsJsonObject(), "accountno");
                     if (!accountList.containsKey(id))
                         accountList.put(id, "Securities account: " + account);
                 }
@@ -570,8 +569,8 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
                 JsonArray jarray = jobject.get("pensions").getAsJsonArray();
 
                 for (JsonElement je : jarray) {
-                    String id = je.getAsJsonObject().get("id").getAsString();
-                    String agreement = je.getAsJsonObject().get("agreementNumber").getAsString();
+                    String id = safeGetString(je.getAsJsonObject(), "id");
+                    String agreement = safeGetString(je.getAsJsonObject(), "agreementNumber");
                     if (!accountList.containsKey(id))
                         accountList.put(id, "Pension agreement: " + agreement);
                 }
@@ -600,8 +599,10 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
                 for (JsonElement je : jarray) {
                     jobject = je.getAsJsonObject();
-                    String id = jobject.get("id").getAsString();
-                    readAccount(id, jobject);
+                    if (jobject != null) {
+                        String id = safeGetString(jobject, "id");
+                        readAccount(id, jobject);
+                    }
                 }
             }
 
@@ -628,9 +629,9 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
                 for (JsonElement je : jarray) {
                     jobject = je.getAsJsonObject();
-                    String id = jobject.get("id").getAsString();
-                    String policyNumber = jobject.get("policyNumber").getAsString();
-                    String productI18N = jobject.get("productI18N").getAsString();
+                    String id = safeGetString(jobject, "id");
+                    String policyNumber = safeGetString(jobject, "policyNumber");
+                    String productI18N = safeGetString(jobject, "productI18N");
                     if (!accountList.containsKey(id))
                         accountList.put(id, "Insurance: " + policyNumber + " (" + productI18N + ")");
                 }
@@ -645,8 +646,8 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
 
     private void readAccount(String id, JsonObject jobject) {
-        String number = jobject.get("accountno").getAsJsonObject().get("number").getAsString();
-        String bankCode = jobject.get("accountno").getAsJsonObject().get("bankCode").getAsString();
+        String number = safeGetString(jobject.get("accountno").getAsJsonObject(), "number");
+        String bankCode = safeGetString(jobject.get("accountno").getAsJsonObject(), "bankCode");
         if (!accountList.containsKey(id))
             accountList.put(id, "Account: " + number + "/" + bankCode);
     }
@@ -683,8 +684,10 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
                 for (JsonElement je : jarray) {
                     jobject = je.getAsJsonObject();
-                    String id = jobject.get("id").getAsString();
-                    readAccount(id, jobject);
+                    if (jobject != null) {
+                        String id = safeGetString(jobject, "id");
+                        readAccount(id, jobject);
+                    }
                 }
             }
         } catch (MalformedURLException e) {
