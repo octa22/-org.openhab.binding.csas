@@ -76,6 +76,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
     private String refreshToken = "";
     private String accessToken = "";
     private String webAPIKey = "";
+    private int historyInterval = 14;
 
     //Gson parser
     private JsonParser parser = new JsonParser();
@@ -154,31 +155,38 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
     }
 
     private void readConfiguration(final Map<String, Object> configuration) {
-        // to override the default refresh interval one has to add a
-        // parameter to openhab.cfg like <bindingName>:refresh=<intervalInMs>
-        String refreshIntervalString = (String) configuration.get("refresh");
-        if (StringUtils.isNotBlank(refreshIntervalString)) {
-            refreshInterval = Long.parseLong(refreshIntervalString);
-        }
 
-        String clientIdString = (String) configuration.get("clientId");
-        if (StringUtils.isNotBlank(clientIdString)) {
-            clientId = clientIdString;
-        }
+        if( configuration != null ) {
+            String refreshIntervalString = (String) configuration.get("refresh");
+            if (StringUtils.isNotBlank(refreshIntervalString)) {
+                refreshInterval = Long.parseLong(refreshIntervalString);
+            }
 
-        String clientSecretString = (String) configuration.get("clientSecret");
-        if (StringUtils.isNotBlank(clientSecretString)) {
-            clientSecret = clientSecretString;
-        }
+            String historyIntervalString = (String) configuration.get("history");
+            if (StringUtils.isNotBlank(historyIntervalString)) {
+                historyInterval = Integer.parseInt(historyIntervalString);
+                historyInterval = (historyInterval > 60) ? 60 : historyInterval;
+            }
 
-        String refreshTokenString = (String) configuration.get("refreshToken");
-        if (StringUtils.isNotBlank(refreshTokenString)) {
-            refreshToken = refreshTokenString;
-        }
+            String clientIdString = (String) configuration.get("clientId");
+            if (StringUtils.isNotBlank(clientIdString)) {
+                clientId = clientIdString;
+            }
 
-        String webAPIKeyString = (String) configuration.get("webAPIKey");
-        if (StringUtils.isNotBlank(webAPIKeyString)) {
-            webAPIKey = webAPIKeyString;
+            String clientSecretString = (String) configuration.get("clientSecret");
+            if (StringUtils.isNotBlank(clientSecretString)) {
+                clientSecret = clientSecretString;
+            }
+
+            String refreshTokenString = (String) configuration.get("refreshToken");
+            if (StringUtils.isNotBlank(refreshTokenString)) {
+                refreshToken = refreshTokenString;
+            }
+
+            String webAPIKeyString = (String) configuration.get("webAPIKey");
+            if (StringUtils.isNotBlank(webAPIKeyString)) {
+                webAPIKey = webAPIKeyString;
+            }
         }
 
     }
@@ -296,15 +304,15 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
     }
 
     private String getTransactionValue(String itemName, HashMap<String, ArrayList<CSASTransaction>> transactionsList, CSASBindingProvider provider) {
-        String iban = provider.getItemId(itemName);
-        if (!transactionsList.containsKey(iban)) {
+        String accountId = provider.getItemId(itemName);
+        if (!transactionsList.containsKey(accountId)) {
             ArrayList<CSASTransaction> list = new ArrayList<>();
-            list.addAll(getReservations(iban));
-            list.addAll(getTransactions(iban));
-            transactionsList.put(iban, list);
+            list.addAll(getReservations(accountId));
+            list.addAll(getTransactions(accountId));
+            transactionsList.put(accountId, list);
         }
         int id = provider.getTransactionId(itemName);
-        if (id > transactionsList.get(iban).size())
+        if (id > transactionsList.get(accountId).size())
             return "";
 
 
@@ -312,33 +320,31 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         CSASItemType type = provider.getItemType(itemName);
         switch (type) {
             case TRANSACTION_BALANCE:
-                result = transactionsList.get(iban).get(id - 1).getBalance();
+                result = transactionsList.get(accountId).get(id - 1).getBalance();
                 break;
             case TRANSACTION_INFO:
-                result = transactionsList.get(iban).get(id - 1).getAccountPartyInfo();
+                result = transactionsList.get(accountId).get(id - 1).getAccountPartyInfo();
                 break;
             case TRANSACTION_DESCRIPTION:
-                result = transactionsList.get(iban).get(id - 1).getDescription();
+                result = transactionsList.get(accountId).get(id - 1).getDescription();
                 break;
             case TRANSACTION_VS:
-                result = transactionsList.get(iban).get(id - 1).getVariableSymbol();
+                result = transactionsList.get(accountId).get(id - 1).getVariableSymbol();
                 break;
             case TRANSACTION_PARTY:
-                result = transactionsList.get(iban).get(id - 1).getAccountPartyDescription();
+                result = transactionsList.get(accountId).get(id - 1).getAccountPartyDescription();
                 break;
         }
         return result;
     }
 
-    private String getAccountIdFromIban(String iban) {
-        if(ibanList.containsValue(iban)) {
-            for(String id : ibanList.keySet()) {
-                if(iban.equals(ibanList.get(id))) {
-                    return id;
-                }
-            }
+    private String getIbanFromAccountId(String accountId) {
+        if(ibanList.containsKey(accountId))
+        {
+            return ibanList.get(accountId);
         }
 
+        logger.error("Cannot get IBAN for account: " + accountId);
         return "";
     }
 
@@ -455,7 +461,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         SimpleDateFormat requestFormat = new SimpleDateFormat("yyyy-MM-dd");
 
         try {
-            url = NETBANKING_V3 + "cz/my/accounts/" + accountId + "/transactions?dateStart=" + requestFormat.format(addDays(new Date(), -14)) + "T00:00:00+01:00&dateEnd=" + requestFormat.format(new Date()) + "T00:00:00+01:00";
+            url = NETBANKING_V3 + "cz/my/accounts/" + getIbanFromAccountId(accountId) + "/transactions?dateStart=" + requestFormat.format(addDays(new Date(), -historyInterval)) + "T00:00:00+01:00&dateEnd=" + requestFormat.format(new Date()) + "T00:00:00+01:00";
 
             String line = DoNetbankingRequest(url);
             logger.debug("CSAS getTransactions: " + line);
@@ -480,13 +486,13 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         return transactionsList;
     }
 
-    private ArrayList<CSASTransaction> getReservations(String iban) {
+    private ArrayList<CSASTransaction> getReservations(String accountId) {
 
         String url = null;
         ArrayList<CSASTransaction> reservationsList = new ArrayList<>();
 
         try {
-            url = NETBANKING_V3 + "my/accounts/" + getAccountIdFromIban(iban) + "/reservations";
+            url = NETBANKING_V3 + "my/accounts/" + accountId + "/reservations";
 
             String line = DoNetbankingRequest(url);
             logger.debug("CSAS getReservations: " + line);
