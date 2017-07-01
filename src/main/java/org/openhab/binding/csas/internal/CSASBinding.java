@@ -156,7 +156,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
     private void readConfiguration(final Map<String, Object> configuration) {
 
-        if( configuration != null ) {
+        if (configuration != null) {
             String refreshIntervalString = (String) configuration.get("refresh");
             if (StringUtils.isNotBlank(refreshIntervalString)) {
                 refreshInterval = Long.parseLong(refreshIntervalString);
@@ -198,8 +198,10 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
      */
     public void modified(final Map<String, Object> configuration) {
         // update the internal configuration accordingly
-        readConfiguration(configuration);
-        refreshToken();
+        if (configuration != null) {
+            readConfiguration(configuration);
+            execute();
+        }
     }
 
     /**
@@ -339,8 +341,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
     }
 
     private String getIbanFromAccountId(String accountId) {
-        if(ibanList.containsKey(accountId))
-        {
+        if (ibanList.containsKey(accountId)) {
             return ibanList.get(accountId);
         }
 
@@ -429,7 +430,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
     }
 
     private String safeGetString(JsonObject jobject, String value) {
-        if (jobject == null || jobject.isJsonNull() || !jobject.has(value) ) return "null";
+        if (jobject == null || jobject.isJsonNull() || !jobject.has(value)) return "null";
         return (jobject.get(value).isJsonNull() ? "N/A" : jobject.get(value).getAsString());
     }
 
@@ -576,8 +577,8 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
                 String variableSymbol = "";
                 tran.setVariableSymbol(variableSymbol);
 
-                tran.setAccountPartyDescription(safeGetString(jobject,"cz-merchantAddress"));
-                tran.setAccountPartyInfo(safeGetString(jobject,"merchantName"));
+                tran.setAccountPartyDescription(safeGetString(jobject, "cz-merchantAddress"));
+                tran.setAccountPartyInfo(safeGetString(jobject, "merchantName"));
             } catch (Exception ex) {
                 logger.error(ex.toString());
             }
