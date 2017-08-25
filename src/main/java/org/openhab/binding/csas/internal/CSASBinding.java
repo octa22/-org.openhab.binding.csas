@@ -8,12 +8,12 @@
  */
 package org.openhab.binding.csas.internal;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import org.apache.commons.lang.StringUtils;
 import org.openhab.binding.csas.CSASBindingProvider;
+import org.openhab.binding.csas.internal.model.*;
+import org.openhab.binding.csas.internal.model.response.*;
 import org.openhab.core.binding.AbstractActiveBinding;
 import org.openhab.core.items.ItemNotFoundException;
 import org.openhab.core.items.ItemRegistry;
@@ -79,7 +79,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
     private int historyInterval = 14;
 
     //Gson parser
-    private JsonParser parser = new JsonParser();
+    private Gson gson = new Gson();
 
     //Account list
     HashMap<String, String> accountList = new HashMap<>();
@@ -131,8 +131,8 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             String line = readResponse(response);
             logger.debug("CSAS response: " + line);
 
-            JsonObject jobject = parser.parse(line).getAsJsonObject();
-            accessToken = safeGetString(jobject, "access_token");
+            CSASRefreshTokenResponse resp = gson.fromJson(line, CSASRefreshTokenResponse.class);
+            accessToken = resp.getAccessToken();
 
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
@@ -279,7 +279,7 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         } else
             refreshToken();
 
-        HashMap<String, ArrayList<CSASTransaction>> transactionsList = new HashMap<>();
+        HashMap<String, ArrayList<CSASSimpleTransaction>> transactionsList = new HashMap<>();
 
         for (final CSASBindingProvider provider : providers) {
             for (final String itemName : provider.getItemNames()) {
@@ -305,10 +305,10 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
 
     }
 
-    private String getTransactionValue(String itemName, HashMap<String, ArrayList<CSASTransaction>> transactionsList, CSASBindingProvider provider) {
+    private String getTransactionValue(String itemName, HashMap<String, ArrayList<CSASSimpleTransaction>> transactionsList, CSASBindingProvider provider) {
         String accountId = provider.getItemId(itemName);
         if (!transactionsList.containsKey(accountId)) {
-            ArrayList<CSASTransaction> list = new ArrayList<>();
+            ArrayList<CSASSimpleTransaction> list = new ArrayList<>();
             list.addAll(getReservations(accountId));
             list.addAll(getTransactions(accountId));
             transactionsList.put(accountId, list);
@@ -367,11 +367,8 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             String line = DoNetbankingRequest(url);
             logger.debug("CSAS getLoyalty: " + line);
 
-            JsonObject jobject = parser.parse(line).getAsJsonObject();
-            if (jobject.get("pointsCount") != null) {
-                return formatMoney(safeGetString(jobject, "pointsCount"));
-            } else
-                return "N/A";
+            CSASLoyaltyResponse resp = gson.fromJson(line, CSASLoyaltyResponse.class);
+            return resp.getPointsCount() != null ? formatMoney(resp.getPointsCount()) : "N/A";
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
@@ -400,14 +397,14 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             String line = DoNetbankingRequest(url);
             logger.debug("CSAS getBalance: " + line);
 
-            JsonObject jobject = parser.parse(line).getAsJsonObject();
+            CSASAccountBalanceResponse resp = gson.fromJson(line, CSASAccountBalanceResponse.class);
+            CSASAmount bal;
             if (balanceType.equals(CSASItemType.BALANCE))
-                jobject = jobject.get("balance").getAsJsonObject();
+                bal = resp.getBalance();
             else
-                jobject = jobject.get("disposable").getAsJsonObject();
+                bal = resp.getDisposable();
 
-            String balance = readBalance(jobject);
-
+            String balance = readBalance(bal);
             logger.debug("CSAS Balance: " + balance);
             return formatMoney(balance);
         } catch (MalformedURLException e) {
@@ -418,15 +415,14 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         return "";
     }
 
-    private String readBalance(JsonObject jobject) {
-        String value = safeGetString(jobject, "value");
-        String currency = safeGetString(jobject, "currency");
+    private String readBalance(CSASAmount balance) {
+        String value = balance.getValue();
+        String currency = balance.getCurrency();
 
-        int precision = jobject.get("precision").getAsInt();
+        int precision = balance.getPrecision();
         int places = value.length();
 
-        String balance = (precision == 0) ? value + ".00 " + currency : value.substring(0, places - precision) + "." + value.substring(places - precision) + " " + currency;
-        return balance;
+        return (precision == 0) ? value + ".00 " + currency : value.substring(0, places - precision) + "." + value.substring(places - precision) + " " + currency;
     }
 
     private String safeGetString(JsonObject jobject, String value) {
@@ -454,10 +450,10 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
     }
 
 
-    private ArrayList<CSASTransaction> getTransactions(String accountId) {
+    private ArrayList<CSASSimpleTransaction> getTransactions(String accountId) {
 
         String url = null;
-        ArrayList<CSASTransaction> transactionsList = new ArrayList<>();
+        ArrayList<CSASSimpleTransaction> transactionsList = new ArrayList<>();
 
         SimpleDateFormat requestFormat = new SimpleDateFormat("yyyy-MM-dd");
 
@@ -465,17 +461,15 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             url = NETBANKING_V3 + "cz/my/accounts/" + getIbanFromAccountId(accountId) + "/transactions?dateStart=" + requestFormat.format(addDays(new Date(), -historyInterval)) + "T00:00:00+01:00&dateEnd=" + requestFormat.format(new Date()) + "T00:00:00+01:00";
 
             String line = DoNetbankingRequest(url);
-            logger.debug("CSAS getTransactions: " + line);
-            JsonObject jobject = parser.parse(line).getAsJsonObject();
-            if (jobject.get("transactions") != null) {
+            logger.debug("CSAS getTransactions: {}", line);
 
-                JsonArray jarray = jobject.get("transactions").getAsJsonArray();
-
-                for (JsonElement je : jarray) {
-                    jobject = je.getAsJsonObject();
-                    transactionsList.add(createTransaction(jobject));
+            CSASTransactionsResponse resp = gson.fromJson(line, CSASTransactionsResponse.class);
+            if (resp.getTransactions() != null) {
+                for (CSASTransaction tran : resp.getTransactions()) {
+                    transactionsList.add(createTransaction(tran));
                 }
             }
+
             logger.trace("Transactions: " + transactionsList.toString());
             return transactionsList;
 
@@ -487,26 +481,24 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         return transactionsList;
     }
 
-    private ArrayList<CSASTransaction> getReservations(String accountId) {
+    private ArrayList<CSASSimpleTransaction> getReservations(String accountId) {
 
         String url = null;
-        ArrayList<CSASTransaction> reservationsList = new ArrayList<>();
+        ArrayList<CSASSimpleTransaction> reservationsList = new ArrayList<>();
 
         try {
             url = NETBANKING_V3 + "my/accounts/" + accountId + "/reservations";
 
             String line = DoNetbankingRequest(url);
             logger.debug("CSAS getReservations: " + line);
-            JsonObject jobject = parser.parse(line).getAsJsonObject();
-            if (jobject.has("reservations")) {
 
-                JsonArray jarray = jobject.get("reservations").getAsJsonArray();
-
-                for (JsonElement je : jarray) {
-                    jobject = je.getAsJsonObject();
-                    reservationsList.add(createReservation(jobject));
+            CSASReservationsResponse resp = gson.fromJson(line, CSASReservationsResponse.class);
+            if (resp.getReservations() != null) {
+                for (CSASReservation reservation : resp.getReservations()) {
+                    reservationsList.add(createReservation(reservation));
                 }
             }
+
             logger.trace("Reservations: " + reservationsList.toString());
             return reservationsList;
 
@@ -518,70 +510,82 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         return reservationsList;
     }
 
-    private CSASTransaction createTransaction(JsonObject jobject) throws ParseException {
+    private CSASSimpleTransaction createTransaction(CSASTransaction csasTran) throws ParseException {
 
         SimpleDateFormat myUTCFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
         SimpleDateFormat requiredFormat = new SimpleDateFormat("dd.MM.yyyy");
 
-        Date date = myUTCFormat.parse(safeGetString(jobject, "bookingDate"));
-        String shortDate = requiredFormat.format(date);
+        CSASSimpleTransaction tran = new CSASSimpleTransaction();
 
-        CSASTransaction tran = new CSASTransaction();
+        try {
+            CSASAmount amount = csasTran.getAmount();
 
-        if (jobject != null && !jobject.isJsonNull()) {
-            try {
-                JsonObject jamount = jobject.get("amount").getAsJsonObject();
+            Date date = myUTCFormat.parse(csasTran.getBookingDate());
+            String shortDate = requiredFormat.format(date);
 
-                String balance = formatMoney(readBalance(jamount)) + " " + shortDate;
-                String description = safeGetString(jobject, "description");
-                tran.setBalance(balance);
+            String balance = formatMoney(readBalance(amount)) + " " + shortDate;
+            String description = csasTran.getDescription();
+            tran.setBalance(balance);
+
+            if (description != null) {
                 tran.setDescription(description);
-
-                String variableSymbol = safeGetString(jobject, "variableSymbol");
-                tran.setVariableSymbol(variableSymbol);
-
-                if (jobject.get("accountParty") != null) {
-                    JsonObject jparty = jobject.get("accountParty").getAsJsonObject();
-                    String accountPartyDescription = safeGetString(jparty, "accountPartyDescription");
-                    tran.setAccountPartyDescription(accountPartyDescription);
-
-                    String accountPartyInfo = safeGetString(jparty, "accountPartyInfo");
-                    tran.setAccountPartyInfo(accountPartyInfo);
-                }
-            } catch (Exception ex) {
-                logger.error(ex.toString());
             }
+
+            String variableSymbol = csasTran.getVariableSymbol();
+            if (variableSymbol != null) {
+                tran.setVariableSymbol(variableSymbol);
+            }
+
+            CSASAccountParty party = csasTran.getAccountParty();
+            if (party == null) {
+                return tran;
+            }
+            if (party.getAccountPartyInfo() != null) {
+                String accountPartyInfo = party.getAccountPartyInfo();
+                tran.setAccountPartyInfo(accountPartyInfo);
+            }
+            if (party.getAccountPartyDescription() != null) {
+                String accountPartyDescription = party.getAccountPartyDescription();
+                tran.setAccountPartyDescription(accountPartyDescription);
+            }
+        } catch (Exception ex) {
+            logger.error(ex.toString());
         }
         return tran;
     }
 
-    private CSASTransaction createReservation(JsonObject jobject) throws ParseException {
+    private CSASSimpleTransaction createReservation(CSASReservation reservation) throws ParseException {
 
         SimpleDateFormat myUTCFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
         SimpleDateFormat requiredFormat = new SimpleDateFormat("dd.MM.yyyy");
 
-        Date date = myUTCFormat.parse(safeGetString(jobject, "creationDate"));
+        Date date = myUTCFormat.parse(reservation.getCreationDate());
         String shortDate = requiredFormat.format(date);
 
-        CSASTransaction tran = new CSASTransaction();
+        CSASSimpleTransaction tran = new CSASSimpleTransaction();
 
-        if (jobject != null && !jobject.isJsonNull()) {
-            try {
-                JsonObject jamount = jobject.get("amount").getAsJsonObject();
+        try {
+            CSASAmount amount = reservation.getAmount();
 
-                String balance = "RES " + formatMoney(readBalance(jamount)) + " " + shortDate;
-                String description = safeGetString(jobject, "description");
-                tran.setBalance(balance);
-                tran.setDescription(description);
+            String balance = "RES " + formatMoney(readBalance(amount)) + " " + shortDate;
 
-                String variableSymbol = "";
-                tran.setVariableSymbol(variableSymbol);
+            tran.setBalance(balance);
 
-                tran.setAccountPartyDescription(safeGetString(jobject, "cz-merchantAddress"));
-                tran.setAccountPartyInfo(safeGetString(jobject, "merchantName"));
-            } catch (Exception ex) {
-                logger.error(ex.toString());
+            if (reservation.getDescription() != null) {
+                tran.setDescription(reservation.getDescription());
             }
+
+            String variableSymbol = "";
+            tran.setVariableSymbol(variableSymbol);
+
+            if (reservation.getMerchantAddress() != null) {
+                tran.setAccountPartyDescription(reservation.getMerchantAddress());
+            }
+            if (reservation.getMerchantName() != null) {
+                tran.setAccountPartyInfo(reservation.getMerchantName());
+            }
+        } catch (Exception ex) {
+            logger.error(ex.toString());
         }
         return tran;
     }
@@ -596,15 +600,12 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             String line = DoNetbankingRequest(url);
             logger.debug("CSAS getCards: " + line);
 
-            JsonObject jobject = parser.parse(line).getAsJsonObject();
-            if (jobject.get("cards") != null) {
-                JsonArray jarray = jobject.get("cards").getAsJsonArray();
-
-                for (JsonElement je : jarray) {
-                    jobject = je.getAsJsonObject().get("mainAccount").getAsJsonObject();
-                    if (jobject != null && jobject.has("id")) {
-                        String id = safeGetString(jobject, "id");
-                        readAccount(id, jobject);
+            CSASCardsResponse resp = gson.fromJson(line, CSASCardsResponse.class);
+            if (resp.getCards() != null) {
+                for (CSASCard card : resp.getCards()) {
+                    CSASAccount cardAccount = card.getMainAccount();
+                    if (cardAccount != null) {
+                        readAccount(cardAccount.getId(), cardAccount.getAccountno());
                     }
                 }
             }
@@ -617,7 +618,6 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
     }
 
     private void getSecurities() {
-
         String url = null;
 
         try {
@@ -626,18 +626,16 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             String line = DoNetbankingRequest(url);
             logger.debug("CSAS getSecurities: " + line);
 
-            JsonObject jobject = parser.parse(line).getAsJsonObject();
-            if (jobject.get("securitiesAccounts") != null) {
-                JsonArray jarray = jobject.get("securitiesAccounts").getAsJsonArray();
-
-                for (JsonElement je : jarray) {
-                    String id = safeGetString(je.getAsJsonObject(), "id");
-                    String account = safeGetString(je.getAsJsonObject(), "accountno");
-                    if (!accountList.containsKey(id))
-                        accountList.put(id, "Securities account: " + account);
+            CSASSecuritiesResponse resp = gson.fromJson(line, CSASSecuritiesResponse.class);
+            if (resp.getSecuritiesAccounts() != null) {
+                for (CSASSecuritiesAccount mainAccount : resp.getSecuritiesAccounts()) {
+                    String id = mainAccount.getId();
+                    String accountno = mainAccount.getAccountno();
+                    if (!accountList.containsKey(id)) {
+                        accountList.put(id, "Securities account: " + accountno);
+                    }
                 }
             }
-
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
@@ -655,18 +653,15 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             String line = DoNetbankingRequest(url);
             logger.debug("CSAS getPensions: " + line);
 
-            JsonObject jobject = parser.parse(line).getAsJsonObject();
-            if (jobject.get("pensions") != null) {
-                JsonArray jarray = jobject.get("pensions").getAsJsonArray();
-
-                for (JsonElement je : jarray) {
-                    String id = safeGetString(je.getAsJsonObject(), "id");
-                    String agreement = safeGetString(je.getAsJsonObject(), "agreementNumber");
+            CSASPensions resp = gson.fromJson(line, CSASPensions.class);
+            if (resp.getPensions() != null) {
+                for (CSASAgreement agreement : resp.getPensions()) {
+                    String id = agreement.getId();
+                    String number = agreement.getAgreementNumber();
                     if (!accountList.containsKey(id))
-                        accountList.put(id, "Pension agreement: " + agreement);
+                        accountList.put(id, "Pension agreement: " + number);
                 }
             }
-
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
@@ -684,19 +679,12 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             String line = DoNetbankingRequest(url);
             logger.debug("CSAS getBuildingSavings: " + line);
 
-            JsonObject jobject = parser.parse(line).getAsJsonObject();
-            if (jobject.get("buildings") != null) {
-                JsonArray jarray = jobject.get("buildings").getAsJsonArray();
-
-                for (JsonElement je : jarray) {
-                    jobject = je.getAsJsonObject();
-                    if (jobject != null) {
-                        String id = safeGetString(jobject, "id");
-                        readAccount(id, jobject);
-                    }
+            CSASBuildingsResponse resp = gson.fromJson(line, CSASBuildingsResponse.class);
+            if (resp.getBuildings() != null) {
+                for (CSASAccount account : resp.getBuildings()) {
+                    readAccount(account.getId(), account.getAccountno());
                 }
             }
-
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
@@ -714,20 +702,16 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             String line = DoNetbankingRequest(url);
             logger.debug("CSAS getInsurances: " + line);
 
-            JsonObject jobject = parser.parse(line).getAsJsonObject();
-            if (jobject.get("insurances") != null) {
-                JsonArray jarray = jobject.get("insurances").getAsJsonArray();
-
-                for (JsonElement je : jarray) {
-                    jobject = je.getAsJsonObject();
-                    String id = safeGetString(jobject, "id");
-                    String policyNumber = safeGetString(jobject, "policyNumber");
-                    String productI18N = safeGetString(jobject, "productI18N");
+            CSASInsurancesResponse resp = gson.fromJson(line, CSASInsurancesResponse.class);
+            if (resp.getInsurances() != null) {
+                for (CSASInsurance insurance : resp.getInsurances()) {
+                    String id = insurance.getId();
+                    String policyNumber = insurance.getPolicyNumber();
+                    String productI18N = insurance.getProductI18N();
                     if (!accountList.containsKey(id))
                         accountList.put(id, "Insurance: " + policyNumber + " (" + productI18N + ")");
                 }
             }
-
         } catch (MalformedURLException e) {
             logger.error("The URL '" + url + "' is malformed: " + e.toString());
         } catch (Exception e) {
@@ -735,15 +719,16 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
         }
     }
 
+    private void readAccount(String id, CSASAccountNumber account) {
+        if (account == null)
+            return;
 
-    private void readAccount(String id, JsonObject jobject) {
-        String number = safeGetString(jobject.get("accountno").getAsJsonObject(), "number");
-        String bankCode = safeGetString(jobject.get("accountno").getAsJsonObject(), "bankCode");
-        String iban = safeGetString(jobject.get("accountno").getAsJsonObject(), "cz-iban");
+        String number = account.getNumber();
+        String bankCode = account.getBankCode();
+        String iban = account.getIban();
         if (!accountList.containsKey(id)) {
             accountList.put(id, "Account: " + number + "/" + bankCode);
             ibanList.put(id, iban);
-
         }
     }
 
@@ -773,16 +758,10 @@ public class CSASBinding extends AbstractActiveBinding<CSASBindingProvider> {
             String line = DoNetbankingRequest(url);
             logger.debug("CSAS getAccounts: " + line);
 
-            JsonObject jobject = parser.parse(line).getAsJsonObject();
-            if (jobject.get("accounts") != null) {
-                JsonArray jarray = jobject.get("accounts").getAsJsonArray();
-
-                for (JsonElement je : jarray) {
-                    jobject = je.getAsJsonObject();
-                    if (jobject != null) {
-                        String id = safeGetString(jobject, "id");
-                        readAccount(id, jobject);
-                    }
+            CSASAccountsResponse resp = gson.fromJson(line, CSASAccountsResponse.class);
+            if (resp.getAccounts() != null) {
+                for (CSASAccount account : resp.getAccounts()) {
+                    readAccount(account.getId(), account.getAccountno());
                 }
             }
         } catch (MalformedURLException e) {

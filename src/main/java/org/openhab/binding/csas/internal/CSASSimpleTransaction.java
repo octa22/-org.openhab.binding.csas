@@ -3,7 +3,7 @@ package org.openhab.binding.csas.internal;
 /**
  * Created by Ondřej Pečta on 22. 11. 2016.
  */
-public class CSASTransaction {
+public class CSASSimpleTransaction {
     private String balance = "-";
     private String accountPartyDescription = "";
     private String accountPartyInfo = "";
